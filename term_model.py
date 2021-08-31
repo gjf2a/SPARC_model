@@ -29,7 +29,7 @@ def score_cohort(data_dictionary, score_func, cohort, term):
 
 # Foundational.
 def gpa_score(row, term):
-    career_gpa = float_filter_nan(row[f'Term {term} Career GPA'])
+    career_gpa = row[f'Term {term} Career GPA']
     if career_gpa is None:
         return None
     if career_gpa < 2.0:
@@ -209,9 +209,10 @@ def main(excel_filename: str, course_history_filename: str, term: int, cohort: s
     student2courses = load_course_table(courses)
     score_func_list = [summer_checklist, gpa_score, explorations, tec, lambda row, term: chem(student2courses, row, term), local_trajectory, global_trajectory, sports_one_year_penalty, sports_score, art_score]
     student_scores = score_cohort(data_dictionary, sum_scores(score_func_list), cohort, term)
+    student_scores.sort(key=lambda k: (k[5], k[1], k[2]))
     output = pd.DataFrame([entry for entry in student_scores],
                           columns=['id_num', 'last_name', 'first_name', 'cohort', 'term', 'score'])
-    output.to_excel(f"Score_Report_{cohort}_{term}.xlsx")
+    output.to_excel(f"..\\SPARC_Records\\Score_Report_{cohort}_{term}.xlsx")
 
 
 if __name__ == '__main__':
