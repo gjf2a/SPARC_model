@@ -15,7 +15,7 @@ def sum_none(score_list):
         return sum(score_list)
 
 
-def score_cohort(data_dictionary, student2courses, score_func, cohort, term):
+def score_cohort(data_dictionary, score_func, cohort, term):
     result = []
     for index, row in data_dictionary.iterrows():
         if row['cohort'] == cohort:
@@ -161,7 +161,7 @@ def played_any_sport_twice(row):
     return False
 
 
-def sports_2(row, term):
+def sports_score(row, term):
     if term >= 3 and played_any_sport_twice(row):
         return 1
     else:
@@ -201,13 +201,14 @@ def art_score(row, term):
     else:
         return 0
 
-# Putting it all together
 
+# Putting it all together
 def main(excel_filename: str, course_history_filename: str, term: int, cohort: str):
     data_dictionary = pd.read_excel(excel_filename)
     courses = pd.read_excel(course_history_filename)
     student2courses = load_course_table(courses)
-    student_scores = score_cohort(data_dictionary, student2courses, sum_scores([]), cohort, term)
+    score_func_list = [summer_checklist, gpa_score, explorations, tec, lambda row, term: chem(student2courses, row, term), local_trajectory, global_trajectory, sports_one_year_penalty, sports_score, art_score]
+    student_scores = score_cohort(data_dictionary, sum_scores(score_func_list), cohort, term)
     output = pd.DataFrame([entry for entry in student_scores],
                           columns=['id_num', 'last_name', 'first_name', 'cohort', 'term', 'score'])
     output.to_excel(f"Score_Report_{cohort}_{term}.xlsx")
@@ -215,7 +216,13 @@ def main(excel_filename: str, course_history_filename: str, term: int, cohort: s
 
 if __name__ == '__main__':
     print(sys.argv)
-    if len(sys.argv) < 5:
-        print("Usage: term_model data_dictionary_file.xlsx course_history_file.xlsx term cohort")
+    if len(sys.argv) < 3:
+        print("Usage: term_model term cohort [data_dictionary_file.xlsx] [course_history_file.xlsx]")
     else:
-        main(sys.argv[1], sys.argv[2], int(sys.argv[3]), sys.argv[4])
+        if len(sys.argv) == 5:
+            dfile = sys.argv[3]
+            cfile = sys.argv[4]
+        else:
+            dfile = "..\\SPARC_Records\\Data_Dictionary.xlsx"
+            cfile = "..\\SPARC_Records\\Course_History.xlsx"
+        main(dfile, cfile, int(sys.argv[1]), sys.argv[2])
