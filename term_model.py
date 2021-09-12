@@ -1,6 +1,10 @@
 from SPARC_lib import *
 import sys
 import pandas as pd
+import inspect
+
+default_dictionary = "..\\SPARC_Records\\Data_Dictionary.xlsx"
+default_courses = "..\\SPARC_Records\\Course_History.xlsx"
 
 
 # Organizational functions
@@ -15,14 +19,46 @@ def sum_none(score_list):
         return sum(score_list)
 
 
-def score_cohort(data_dictionary, score_func, cohort, term):
+@dataclass
+class ScoredStudent:
+    id_num: str
+    last_name: str
+    first_name: str
+    cohort: str
+    baseline_term: int
+    last_term_enrolled: int
+    score: int
+
+    def persisted(self):
+        return self.last_term_enrolled > self.baseline_term
+
+
+def row2scored(row, term, cohort, score_func, student2courses):
+    if row['cohort'] == cohort:
+        score = score_func(row, term)
+        if score is not None:
+            id_num = row['id_num']
+            return ScoredStudent(id_num=id_num,
+                                 last_name=row['last_name'],
+                                 first_name=row['first_name'],
+                                 cohort=cohort,
+                                 baseline_term=term,
+                                 last_term_enrolled=latest_enrolled_term(cohort, student2courses[id_num]),
+                                 score=score)
+
+
+def score_cohort(data_dictionary, student2courses, score_func, cohort, term):
     result = []
     for index, row in data_dictionary.iterrows():
-        if row['cohort'] == cohort:
-            score = score_func(row, term)
-            if score is not None:
-                result.append((row['id_num'], row['last_name'], row['first_name'], row['cohort'], term, score))
+        record = row2scored(row, term, cohort, score_func, student2courses)
+        if record:
+            result.append(record)
+    result.sort(key=lambda k: (k.score, k.last_name, k.first_name))
     return result
+
+
+def latest_enrolled_term(cohort, course_records):
+    return max(course_record.semester_number('20' + cohort[2:4]) for course_record in course_records)
 
 
 # Scoring functions
@@ -202,28 +238,35 @@ def art_score(row, term):
         return 0
 
 
-# Putting it all together
-def main(excel_filename: str, course_history_filename: str, term: int, cohort: str):
+def get_scores_for(cohort: str, term: int, exclusion=True, excel_filename=default_dictionary,
+                   course_history_filename=default_courses) -> List[ScoredStudent]:
     data_dictionary = pd.read_excel(excel_filename)
     courses = pd.read_excel(course_history_filename)
     student2courses = load_course_table(courses)
     score_func_list = [summer_checklist, gpa_score, explorations, tec, lambda row, term: chem(student2courses, row, term), local_trajectory, global_trajectory, sports_one_year_penalty, sports_score, art_score]
-    student_scores = score_cohort(data_dictionary, sum_scores(score_func_list), cohort, term)
-    student_scores.sort(key=lambda k: (k[5], k[1], k[2]))
-    output = pd.DataFrame([entry for entry in student_scores],
-                          columns=['id_num', 'last_name', 'first_name', 'cohort', 'term', 'score'])
+    student_scores = score_cohort(data_dictionary, student2courses, sum_scores(score_func_list), cohort, term)
+    if exclusion:
+        student_scores = [entry for entry in student_scores if entry.persisted()]
+    return student_scores
+
+
+# Putting it all together
+def main(excel_filename: str, course_history_filename: str, term: int, cohort: str, exclusion: bool):
+    student_scores = get_scores_for(cohort, term, exclusion, excel_filename, course_history_filename)
+    output = pd.DataFrame(student_scores, columns=inspect.getmembers(ScoredStudent)[0][1].keys())
     output.to_excel(f"..\\SPARC_Records\\Score_Report_{cohort}_{term}.xlsx")
 
 
 if __name__ == '__main__':
     print(sys.argv)
     if len(sys.argv) < 3:
-        print("Usage: term_model term cohort [data_dictionary_file.xlsx] [course_history_file.xlsx]")
+        print("Usage: term_model term cohort [data_dictionary_file.xlsx] [course_history_file.xlsx] [-x]")
+        print(" -x: Exclude students whose last term enrolled is <= analysis term")
     else:
-        if len(sys.argv) == 5:
+        if len(sys.argv) >= 5:
             dfile = sys.argv[3]
             cfile = sys.argv[4]
         else:
-            dfile = "..\\SPARC_Records\\Data_Dictionary.xlsx"
-            cfile = "..\\SPARC_Records\\Course_History.xlsx"
-        main(dfile, cfile, int(sys.argv[1]), sys.argv[2])
+            dfile = default_dictionary
+            cfile = default_courses
+        main(dfile, cfile, int(sys.argv[1]), sys.argv[2], '-x' in sys.argv)
