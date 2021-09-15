@@ -3,6 +3,8 @@ import sys
 import pandas as pd
 import inspect
 
+from util import DataDictionary
+
 default_dictionary = "..\\SPARC_Records\\Data_Dictionary.xlsx"
 default_courses = "..\\SPARC_Records\\Course_History.xlsx"
 
@@ -38,13 +40,14 @@ def row2scored(row, term, cohort, score_func, student2courses):
         score = score_func(row, term)
         if score is not None:
             id_num = row['id_num']
-            return ScoredStudent(id_num=id_num,
-                                 last_name=row['last_name'],
-                                 first_name=row['first_name'],
-                                 cohort=cohort,
-                                 baseline_term=term,
-                                 last_term_enrolled=latest_enrolled_term(cohort, student2courses[id_num]),
-                                 score=score)
+            if id_num in student2courses:
+                return ScoredStudent(id_num=id_num,
+                                     last_name=row['last_name'],
+                                     first_name=row['first_name'],
+                                     cohort=cohort,
+                                     baseline_term=term,
+                                     last_term_enrolled=latest_enrolled_term(cohort, student2courses[id_num]),
+                                     score=score)
 
 
 def score_cohort(data_dictionary, student2courses, score_func, cohort, term):
@@ -238,13 +241,11 @@ def art_score(row, term):
         return 0
 
 
-def get_scores_for(cohort: str, term: int, exclusion=True, excel_filename=default_dictionary,
-                   course_history_filename=default_courses) -> List[ScoredStudent]:
-    data_dictionary = pd.read_excel(excel_filename)
-    courses = pd.read_excel(course_history_filename)
-    student2courses = load_course_table(courses)
-    score_func_list = [summer_checklist, gpa_score, explorations, tec, lambda row, term: chem(student2courses, row, term), local_trajectory, global_trajectory, sports_one_year_penalty, sports_score, art_score]
-    student_scores = score_cohort(data_dictionary, student2courses, sum_scores(score_func_list), cohort, term)
+def get_scores_for(cohort: str, term: int, data: DataDictionary, exclusion=True) -> List[ScoredStudent]:
+    score_func_list = [summer_checklist, gpa_score, explorations, tec,
+                       lambda row, term: chem(data.student2courses, row, term),
+                       local_trajectory, global_trajectory, sports_one_year_penalty, sports_score, art_score]
+    student_scores = score_cohort(data.rows, data.student2courses, sum_scores(score_func_list), cohort, term)
     if exclusion:
         student_scores = [entry for entry in student_scores if entry.persisted()]
     return student_scores
@@ -252,7 +253,8 @@ def get_scores_for(cohort: str, term: int, exclusion=True, excel_filename=defaul
 
 # Putting it all together
 def main(excel_filename: str, course_history_filename: str, term: int, cohort: str, exclusion: bool):
-    student_scores = get_scores_for(cohort, term, exclusion, excel_filename, course_history_filename)
+    data = DataDictionary(excel_filename, course_history_filename)
+    student_scores = get_scores_for(cohort, term, data, exclusion)
     output = pd.DataFrame(student_scores, columns=inspect.getmembers(ScoredStudent)[0][1].keys())
     output.to_excel(f"..\\SPARC_Records\\Score_Report_{cohort}_{term}.xlsx")
 

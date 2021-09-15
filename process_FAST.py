@@ -51,7 +51,7 @@ def excel2cohorts(excel_file: str) -> Dict[str,List[FastStudent]]:
 def main(excel_file):
     cohorts = excel2cohorts(excel_file)
     for (cohort, cohort_students) in cohorts.items():
-        cohort_students.sort(key=lambda student: (-(student.high + student.medium), -student.high, -student.medium))
+        cohort_students.sort(key=lambda student: (-(student.high + student.moderate), -student.high, -student.moderate))
         output = pd.DataFrame(cohort_students, columns=inspect.getmembers(FastStudent)[0][1].keys())
         output.to_excel(f"..\\SPARC_Records\\FAST_report_{cohort}.xlsx")
 
